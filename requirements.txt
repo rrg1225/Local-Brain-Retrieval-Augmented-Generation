@@ -1,0 +1,27 @@
+# LlamaIndex core + Chroma + Google GenAI (Gemini LLM & Embeddings)
+llama-index-core>=0.12.0,<0.15.0
+llama-index-vector-stores-chroma>=0.4.0,<0.6.0
+llama-index-llms-google-genai>=0.1.0,<0.3.0
+llama-index-llms-dashscope>=0.1.0,<0.7.0
+llama-index-embeddings-google-genai>=0.2.0,<0.6.0
+
+# Vector store (local persistence only; no Docker)
+chromadb>=0.5.0,<1.0.0
+
+# UI
+streamlit>=1.40.0,<2.0.0
+
+# File watching
+watchdog>=6.0.0,<7.0.0
+
+# Config
+python-dotenv>=1.0.0,<2.0.0
+
+# PDF parsing (PyMuPDF / fitz)
+PyMuPDF>=1.24.0,<2.0.0
+
+# Explicit: Google GenAI client types (HttpOptions); usually pulled by integrations
+google-genai>=1.0.0,<2.0.0
+
+# Code-aware splitting (tree-sitter); LlamaIndex CodeSplitter
+tree-sitter-language-pack>=0.7.0,<2.0.0

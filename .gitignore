@@ -1,0 +1,28 @@
+# 敏感配置 — 包含真实 API Key，严禁提交
+.env
+
+# Python 字节码缓存
+__pycache__/
+
+# Chroma 向量数据库本地持久化
+chroma_db/
+.chroma_second_brain/
+
+# 动态上传/解压文件工作区
+dynamic_workspace/
+
+# 索引状态文件（按空间隔离）
+.index_state_*.json
+
+# 对话历史文件（按空间隔离）
+.chat_history_*.json
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统
+.DS_Store
+Thumbs.db
