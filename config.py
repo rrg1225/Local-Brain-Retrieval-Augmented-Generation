@@ -11,6 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
+from filelock import FileLock
 
 
 @dataclass
@@ -65,53 +66,59 @@ def _load_persistent_workspaces() -> list[Path]:
 
 
 def save_persistent_workspace(space_name: str, new_path: Path) -> None:
-    """将路径追加到指定空间的工作区列表并保存。"""
+    """将路径追加到指定空间的工作区列表并保存（文件锁防并发）。"""
     ws_file = Path.cwd() / "workspaces.json"
+    lock = FileLock(str(ws_file) + ".lock")
     resolved = str(new_path.resolve())
-    data: dict = {}
-    if ws_file.exists():
+
+    with lock:
+        data: dict = {}
+        if ws_file.exists():
+            try:
+                data = json.loads(ws_file.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    # 旧格式自动迁移
+                    data = {}
+            except (json.JSONDecodeError, OSError):
+                data = {}
+
+        space_paths: list[str] = data.setdefault(space_name, [])
+        if resolved not in space_paths:
+            space_paths.append(resolved)
+            ws_file.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            reset_config_cache()
+
+
+def remove_persistent_workspace(space_name: str, target: Path) -> None:
+    """从指定空间的工作区列表中移除路径并保存（文件锁防并发）；若空间列表为空则清理该 key。"""
+    ws_file = Path.cwd() / "workspaces.json"
+    if not ws_file.exists():
+        return
+    lock = FileLock(str(ws_file) + ".lock")
+
+    with lock:
         try:
             data = json.loads(ws_file.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
-                # 旧格式自动迁移
-                data = {}
+                return
         except (json.JSONDecodeError, OSError):
-            data = {}
+            return
 
-    space_paths: list[str] = data.setdefault(space_name, [])
-    if resolved not in space_paths:
-        space_paths.append(resolved)
+        resolved = str(target.resolve())
+        space_paths: list[str] = data.get(space_name, [])
+        if resolved not in space_paths:
+            return
+        space_paths.remove(resolved)
+        if not space_paths:
+            data.pop(space_name, None)
         ws_file.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         reset_config_cache()
-
-
-def remove_persistent_workspace(space_name: str, target: Path) -> None:
-    """从指定空间的工作区列表中移除路径并保存；若空间列表为空则清理该 key。"""
-    ws_file = Path.cwd() / "workspaces.json"
-    if not ws_file.exists():
-        return
-    try:
-        data = json.loads(ws_file.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return
-    except (json.JSONDecodeError, OSError):
-        return
-
-    resolved = str(target.resolve())
-    space_paths: list[str] = data.get(space_name, [])
-    if resolved not in space_paths:
-        return
-    space_paths.remove(resolved)
-    if not space_paths:
-        data.pop(space_name, None)
-    ws_file.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    reset_config_cache()
 
 
 def apply_http_proxy_env(http_proxy: str | None) -> None:

@@ -516,6 +516,7 @@ def _make_local_embed(cfg: AppConfig) -> HuggingFaceEmbedding:
             model_name=cfg.local_embed_model,
             device=device,
             trust_remote_code=True,
+            model_kwargs={"torch_dtype": torch.float16},
         )
     except Exception as e:
         if "onnx" in str(e).lower():
@@ -840,6 +841,7 @@ def build_chat_engine(
         model=cfg.local_rerank_model,
         top_n=cfg.top_k,
         device=device,
+        model_kwargs={"torch_dtype": torch.float16},
     )
 
     # BM25 + Vector 混合检索 (RRF 融合)
