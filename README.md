@@ -157,6 +157,16 @@ streamlit run main.py
 
 Open `http://localhost:8501` and start conversing with your codebase.
 
+### 4. Lightweight Doctor
+
+Run this before installing the full GPU stack or launching Streamlit:
+
+```bash
+python doctor.py
+```
+
+It checks API key placeholders, workspace paths, Chroma persistence paths, and required project files without importing heavy ML packages.
+
 ---
 
 ## 💡 Usage
@@ -250,6 +260,7 @@ conda create -n bendirag python=3.11 -y && conda activate bendirag
 pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 pip install -r requirements.txt
 cp .env.example .env   # 编辑填入 GEMINI_API_KEY
+python doctor.py       # 轻量环境预检
 streamlit run main.py
 ```
 
