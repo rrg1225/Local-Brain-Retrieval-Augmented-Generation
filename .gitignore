@@ -10,12 +10,21 @@ chroma_db/
 
 # 动态上传/解压文件工作区
 dynamic_workspace/
+workspace/
+workspaces.json
 
 # 索引状态文件（按空间隔离）
 .index_state_*.json
 
 # 对话历史文件（按空间隔离）
 .chat_history_*.json
+
+# 模型、缓存与临时文件
+.cache/
+hf_cache/
+models/
+*.tmp
+*.log
 
 # IDE / 编辑器
 .vscode/
