@@ -132,6 +132,28 @@ def apply_http_proxy_env(http_proxy: str | None) -> None:
     os.environ["https_proxy"] = p
 
 
+def _int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return min(max(value, minimum), maximum)
+
+
+def _float_env(name: str, default: float, *, minimum: float, maximum: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return min(max(value, minimum), maximum)
+
+
 @lru_cache(maxsize=1)
 def get_config() -> AppConfig:
     load_dotenv()
@@ -173,11 +195,11 @@ def get_config() -> AppConfig:
         llm_model=os.getenv("GEMINI_LLM_MODEL", "gemini-2.5-flash"),
         local_embed_model=os.getenv("LOCAL_EMBED_MODEL", "BAAI/bge-large-zh-v1.5"),
         local_rerank_model=os.getenv("LOCAL_RERANK_MODEL", "BAAI/bge-reranker-v2-m3"),
-        chunk_size=int(os.getenv("CHUNK_SIZE", "512")),
-        chunk_overlap=int(os.getenv("CHUNK_OVERLAP", "64")),
-        top_k=int(os.getenv("TOP_K", "5")),
-        debounce=float(os.getenv("DEBOUNCE_SECONDS", "60")),
-        memory_token_limit=int(os.getenv("MEMORY_TOKEN_LIMIT", "8192")),
+        chunk_size=_int_env("CHUNK_SIZE", 512, minimum=128, maximum=4096),
+        chunk_overlap=_int_env("CHUNK_OVERLAP", 64, minimum=0, maximum=1024),
+        top_k=_int_env("TOP_K", 5, minimum=1, maximum=50),
+        debounce=_float_env("DEBOUNCE_SECONDS", 60.0, minimum=1.0, maximum=3600.0),
+        memory_token_limit=_int_env("MEMORY_TOKEN_LIMIT", 8192, minimum=1024, maximum=65536),
     )
 
 
