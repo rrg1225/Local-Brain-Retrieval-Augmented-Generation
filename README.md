@@ -20,6 +20,8 @@
   <sub>English · <a href="#中文">中文</a></sub>
 </p>
 
+> Resume and interview brief: [PORTFOLIO.md](PORTFOLIO.md)
+
 ---
 
 ## ✨ Highlights
