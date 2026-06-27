@@ -16,3 +16,4 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m py_compile app.py config.py doctor.py main.py rag_engine.py watcher.py
+      - run: python health_report.py

@@ -75,6 +75,7 @@ CHUNK_OVERLAP=64
 ```bash
 python -m py_compile app.py config.py doctor.py main.py rag_engine.py watcher.py
 python doctor.py
+python health_report.py
 ```
 
 ## Operational Readiness
