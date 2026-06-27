@@ -38,6 +38,13 @@ def status(ok: bool, message: str) -> None:
     print(text.encode(encoding, errors="replace").decode(encoding, errors="replace"))
 
 
+def path_status(root: Path, raw_path: str) -> tuple[bool, Path]:
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = root / path
+    return path.exists(), path
+
+
 def main() -> None:
     root = Path(__file__).resolve().parent
     env = {**load_dotenv(root / ".env.example"), **load_dotenv(root / ".env"), **os.environ}
@@ -56,13 +63,13 @@ def main() -> None:
     status(len(workspace_paths) > 0, f"{len(workspace_paths)} workspace path(s) configured")
 
     for raw_path in workspace_paths:
-        path = Path(raw_path)
-        if not path.is_absolute():
-            path = root / path
-        status(path.exists(), f"workspace exists: {path}")
+        exists, path = path_status(root, raw_path)
+        status(exists, f"workspace exists: {path}")
 
     status(chroma_dir.parent.exists(), f"Chroma parent exists: {chroma_dir.parent}")
     status((root / "requirements.txt").exists(), "requirements.txt present")
+    status(not (root / ".env").exists(), ".env is local-only and should not be committed")
+    status(not (root / "workspaces.json").exists(), "workspace state is local-only and should not be committed")
     print("\nNext: pip install -r requirements.txt && streamlit run main.py")
 
 
