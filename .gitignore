@@ -1,38 +1,38 @@
-# 敏感配置 — 包含真实 API Key，严禁提交
+# Sensitive local configuration
 .env
+.env.local
+.env.*.local
 
-# Python 字节码缓存
+# Python cache
 __pycache__/
+*.py[cod]
 
-# Chroma 向量数据库本地持久化
+# Local vector stores
 chroma_db/
 .chroma_second_brain/
 
-# 动态上传/解压文件工作区
+# User workspaces and uploaded files
 dynamic_workspace/
 workspace/
 workspaces.json
+workspaces.json.lock
 
-# 索引状态文件（按空间隔离）
+# Per-workspace index state and chat history
 .index_state_*.json
-
-# 对话历史文件（按空间隔离）
 .chat_history_*.json
 
-# 模型、缓存与临时文件
+# Models, caches, and temporary files
 .cache/
 hf_cache/
 models/
 *.tmp
 *.log
 
-# IDE / 编辑器
+# IDE and operating-system files
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# 操作系统
 .DS_Store
 Thumbs.db
 *.local.docx

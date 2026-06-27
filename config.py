@@ -1,5 +1,9 @@
-"""
-应用配置：从 .env 加载 API Key、本地 Embedding/Rerank 模型、工作区路径等，并注入系统级 HTTP(S) 代理环境变量。
+"""Application configuration for Local Brain RAG.
+
+The module loads provider keys, retrieval settings, model names, and workspace
+paths from environment variables. Runtime workspace changes are persisted in a
+small JSON file protected by a file lock so the Streamlit app and watcher can
+share state safely.
 """
 
 from __future__ import annotations
@@ -17,16 +21,16 @@ from filelock import FileLock
 @dataclass
 class AppConfig:
     api_key: str
-    """Gemini / Google GenAI API Key（可与 GOOGLE_API_KEY 同步）。"""
+    """Gemini / Google GenAI API key. Mirrored to GOOGLE_API_KEY when present."""
 
     dashscope_api_key: str
-    """阿里云 DashScope / 百炼 API Key（通义千问对话）。"""
+    """DashScope / Qwen API key used by optional provider failover."""
 
     proxy_base: str
-    """Cloudflare Worker 根 URL（Google GenAI HttpOptions.base_url）。"""
+    """Optional Google GenAI compatible base URL, for example a proxy endpoint."""
 
     http_proxy: str | None
-    """本地 HTTP 隧道代理，如 Clash；写入 HTTP_PROXY / HTTPS_PROXY 等。"""
+    """Optional local HTTP proxy. Applied to HTTP_PROXY and HTTPS_PROXY."""
 
     workspaces: list[Path]
     chroma_dir: str
@@ -40,96 +44,97 @@ class AppConfig:
     memory_token_limit: int
 
 
+def _workspace_file() -> Path:
+    return Path.cwd() / "workspaces.json"
+
+
 def _load_persistent_workspaces() -> list[Path]:
-    """从 workspaces.json 加载所有空间的工作区路径（并集），兼容旧版列表格式。"""
-    ws_file = Path.cwd() / "workspaces.json"
+    """Load saved workspace paths from the current workspace state file."""
+    ws_file = _workspace_file()
     if not ws_file.exists():
         return []
+
     try:
-        with open(ws_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            # 新版：{"space_name": ["/path1", ...]}
-            paths: list[Path] = []
-            for space_paths in data.values():
-                if isinstance(space_paths, list):
-                    for p in space_paths:
-                        if p and Path(p).resolve().is_dir():
-                            paths.append(Path(p).resolve())
-            return paths
-        if isinstance(data, list):
-            # 旧版：["/path1", ...] — 自动迁移到新版格式
-            return [Path(p).resolve() for p in data if p and Path(p).resolve().is_dir()]
+        data = json.loads(ws_file.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        pass
-    return []
+        return []
+
+    paths: list[Path] = []
+    if isinstance(data, dict):
+        for space_paths in data.values():
+            if isinstance(space_paths, list):
+                paths.extend(Path(p).resolve() for p in space_paths if p and Path(p).resolve().is_dir())
+    elif isinstance(data, list):
+        paths.extend(Path(p).resolve() for p in data if p and Path(p).resolve().is_dir())
+
+    return paths
 
 
 def save_persistent_workspace(space_name: str, new_path: Path) -> None:
-    """将路径追加到指定空间的工作区列表并保存（文件锁防并发）。"""
-    ws_file = Path.cwd() / "workspaces.json"
+    """Append a workspace path to a named space and invalidate config cache."""
+    ws_file = _workspace_file()
     lock = FileLock(str(ws_file) + ".lock")
     resolved = str(new_path.resolve())
 
     with lock:
-        data: dict = {}
+        data: dict[str, list[str]] = {}
         if ws_file.exists():
             try:
-                data = json.loads(ws_file.read_text(encoding="utf-8"))
-                if not isinstance(data, dict):
-                    # 旧格式自动迁移
-                    data = {}
+                loaded = json.loads(ws_file.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    data = loaded
             except (json.JSONDecodeError, OSError):
                 data = {}
 
-        space_paths: list[str] = data.setdefault(space_name, [])
+        space_paths = data.setdefault(space_name, [])
         if resolved not in space_paths:
             space_paths.append(resolved)
-            ws_file.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            ws_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             reset_config_cache()
 
 
 def remove_persistent_workspace(space_name: str, target: Path) -> None:
-    """从指定空间的工作区列表中移除路径并保存（文件锁防并发）；若空间列表为空则清理该 key。"""
-    ws_file = Path.cwd() / "workspaces.json"
+    """Remove a workspace path from a named space and invalidate config cache."""
+    ws_file = _workspace_file()
     if not ws_file.exists():
         return
+
     lock = FileLock(str(ws_file) + ".lock")
+    resolved = str(target.resolve())
 
     with lock:
         try:
             data = json.loads(ws_file.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                return
         except (json.JSONDecodeError, OSError):
             return
 
-        resolved = str(target.resolve())
+        if not isinstance(data, dict):
+            return
+
         space_paths: list[str] = data.get(space_name, [])
         if resolved not in space_paths:
             return
+
         space_paths.remove(resolved)
-        if not space_paths:
+        if space_paths:
+            data[space_name] = space_paths
+        else:
             data.pop(space_name, None)
-        ws_file.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+
+        ws_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         reset_config_cache()
 
 
 def apply_http_proxy_env(http_proxy: str | None) -> None:
-    """将 .env 中的 HTTP_PROXY 同步到进程环境，供 httpx/urllib 等客户端走本地代理隧道。"""
+    """Apply a configured proxy to common Python HTTP client environment names."""
     if not http_proxy or not str(http_proxy).strip():
         return
-    p = str(http_proxy).strip()
-    os.environ["HTTP_PROXY"] = p
-    os.environ["HTTPS_PROXY"] = p
-    os.environ["http_proxy"] = p
-    os.environ["https_proxy"] = p
+
+    proxy = str(http_proxy).strip()
+    os.environ["HTTP_PROXY"] = proxy
+    os.environ["HTTPS_PROXY"] = proxy
+    os.environ["http_proxy"] = proxy
+    os.environ["https_proxy"] = proxy
 
 
 def _int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
@@ -167,28 +172,19 @@ def get_config() -> AppConfig:
     http_proxy = os.getenv("HTTP_PROXY", "").strip() or None
     apply_http_proxy_env(http_proxy)
 
-    proxy = os.getenv("PROXY_URL", "").strip().rstrip("/")
     workspaces_raw = os.getenv("WORKSPACE_PATHS", "./workspace")
     workspaces = [Path(p.strip()).resolve() for p in workspaces_raw.split(",") if p.strip()]
-
-    # 加载持久化的工作空间路径
-    persistent_workspaces = _load_persistent_workspaces()
-    workspaces.extend(persistent_workspaces)
-
-    # 去重（以 resolved 绝对路径为准）
-    workspaces = list({p.resolve() for p in workspaces})
+    workspaces.extend(_load_persistent_workspaces())
 
     dynamic_dir = Path("./dynamic_workspace").resolve()
     dynamic_dir.mkdir(parents=True, exist_ok=True)
-    if dynamic_dir not in workspaces:
-        workspaces.append(dynamic_dir)
-
-    api_key = gemini_key or os.getenv("GOOGLE_API_KEY", "").strip()
+    workspaces.append(dynamic_dir)
+    workspaces = list({path.resolve() for path in workspaces})
 
     return AppConfig(
-        api_key=api_key,
+        api_key=gemini_key or os.getenv("GOOGLE_API_KEY", "").strip(),
         dashscope_api_key=dashscope_key,
-        proxy_base=proxy,
+        proxy_base=os.getenv("PROXY_URL", "").strip().rstrip("/"),
         http_proxy=http_proxy,
         workspaces=workspaces,
         chroma_dir=os.getenv("CHROMA_PERSIST_DIR", "./.chroma_second_brain"),
@@ -204,5 +200,5 @@ def get_config() -> AppConfig:
 
 
 def reset_config_cache() -> None:
-    """测试或热重载 .env 时可调用。"""
+    """Clear cached configuration after local workspace state changes."""
     get_config.cache_clear()

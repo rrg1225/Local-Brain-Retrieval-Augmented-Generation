@@ -77,11 +77,24 @@ python -m py_compile app.py config.py doctor.py main.py rag_engine.py watcher.py
 python doctor.py
 ```
 
+## Operational Readiness
+
+- `.env`, Chroma persistence, chat history, uploaded workspaces, and index state are ignored by Git.
+- `doctor.py` can run before the full model stack is installed.
+- Configuration values are clamped to safe ranges to avoid accidental oversized retrieval jobs.
+- Workspace state is stored with file locking for safer Streamlit and watcher coordination.
+
 ## Privacy Notes
 
 - Local files are indexed into a local Chroma directory.
 - API keys belong in `.env`, not in committed files.
 - `dynamic_workspace/`, `.chroma_second_brain/`, chat history, and index state files are ignored by Git.
+
+## Roadmap
+
+- Add provider-level health checks and fallback telemetry.
+- Add retrieval evaluation fixtures for ranking and citation quality.
+- Add exportable workspace manifests for repeatable team onboarding.
 
 ## License
 
